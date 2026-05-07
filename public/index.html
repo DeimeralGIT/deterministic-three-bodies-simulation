@@ -41,6 +41,9 @@
     <label for="trailLength">Trail length <span id="trailLengthValue">650</span></label>
     <input id="trailLength" type="range" min="20" max="2500" step="10" value="650">
 
+    <label for="probabilisticBehaviour">Probabilistic behaviour <span id="probabilisticBehaviourValue">0.0000</span></label>
+    <input id="probabilisticBehaviour" type="range" min="0" max="0.01" step="0.0001" value="0">
+
     <div class="actions">
       <button id="toggle" type="button">Pause</button>
       <button id="restart" type="button">Restart</button>
@@ -134,7 +137,7 @@ keyLight.position.set(8, 12, 10);
 scene.add(keyLight);
 
 const ui = Object.fromEntries(
-  ["bodyCount", "gravity", "limitX", "limitY", "limitZ", "showGrid", "showAxisNumbers", "stepsPerFrame", "trailLength"].map((id) => [id, document.getElementById(id)])
+  ["bodyCount", "gravity", "limitX", "limitY", "limitZ", "showGrid", "showAxisNumbers", "stepsPerFrame", "trailLength", "probabilisticBehaviour"].map((id) => [id, document.getElementById(id)])
 );
 
 function rand(seed) {
@@ -180,9 +183,11 @@ function readConfig() {
   const limitX = clamp(Number(ui.limitX.value), 6, 16);
   const limitY = clamp(Number(ui.limitY.value), 6, 16);
   const limitZ = clamp(Number(ui.limitZ.value), 6, 16);
+  const probabilisticBehaviour = Math.round(clamp(Number(ui.probabilisticBehaviour.value), 0, 0.01) * 10000) / 10000;
   ui.limitX.value = String(limitX);
   ui.limitY.value = String(limitY);
   ui.limitZ.value = String(limitZ);
+  ui.probabilisticBehaviour.value = probabilisticBehaviour.toFixed(4);
 
   return {
     bodyCount: Number(ui.bodyCount.value),
@@ -196,6 +201,7 @@ function readConfig() {
     showAxisNumbers: ui.showAxisNumbers.checked,
     stepsPerFrame: Number(ui.stepsPerFrame.value),
     trailLength: Number(ui.trailLength.value),
+    probabilisticBehaviour,
     seed: state.baseSeed + state.seedBump,
   };
 }
@@ -205,6 +211,7 @@ function updateLabels() {
   document.getElementById("gravityValue").textContent = Number(ui.gravity.value).toFixed(1);
   document.getElementById("stepsPerFrameValue").textContent = ui.stepsPerFrame.value;
   document.getElementById("trailLengthValue").textContent = ui.trailLength.value;
+  document.getElementById("probabilisticBehaviourValue").textContent = Number(ui.probabilisticBehaviour.value).toFixed(4);
   document.getElementById("bodyMetric").textContent = state.bodies.length;
   document.getElementById("step").textContent = state.step.toLocaleString();
   document.getElementById("simTime").textContent = state.time.toFixed(3);
@@ -369,6 +376,30 @@ function rk4Step(bodies, config) {
       .addScaledVector(k2v[i], dt / 3)
       .addScaledVector(k3v[i], dt / 3)
       .addScaledVector(k4v[i], dt / 6);
+  }
+}
+
+function applyProbabilisticBehaviour(bodies, config) {
+  const intensity = Math.max(0, Math.min(0.01, config.probabilisticBehaviour));
+  if (intensity <= 1e-9) return;
+
+  // Blend direction and magnitude jitter to keep behavior visible but controllable.
+  const directionMaxAngle = 0.35 * intensity;
+  const speedJitter = 0.12 * intensity;
+
+  for (const body of bodies) {
+    const speed = body.velocity.length();
+    if (speed < 1e-9) continue;
+
+    const jitterDirection = Math.random() < 0.5;
+    if (jitterDirection) {
+      const randomAxis = randomDirection(Math.random);
+      const angle = (Math.random() * 2 - 1) * directionMaxAngle;
+      body.velocity.applyAxisAngle(randomAxis, angle);
+    } else {
+      const scale = 1 + (Math.random() * 2 - 1) * speedJitter;
+      body.velocity.multiplyScalar(Math.max(0.05, scale));
+    }
   }
 }
 
@@ -590,9 +621,13 @@ function updateVisuals() {
 
 function tick() {
   const config = readConfig();
+  const probabilistic = Math.max(0, Math.min(0.01, config.probabilisticBehaviour));
   if (state.running && !state.escaped) {
     for (let i = 0; i < config.stepsPerFrame; i++) {
       rk4Step(state.bodies, config);
+      if (probabilistic > 1e-9) applyProbabilisticBehaviour(state.bodies, config);
+      // Keep the system barycenter fixed at sandbox center to avoid global drift wall hits.
+      applyComFrame(state.bodies);
       state.step += 1;
       state.time += config.dt;
       checkBoundary(config);
