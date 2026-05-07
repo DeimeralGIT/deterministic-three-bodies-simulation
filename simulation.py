@@ -18,6 +18,25 @@ MAX_BODIES = 8
 BODY_NAMES = ["A", "B", "C", "D", "E", "F", "G", "H"]
 
 
+def mass_range_for_box(orbit_limit_x: float, orbit_limit_y: float, orbit_limit_z: float) -> tuple[float, float]:
+    """Linear mass range from sandbox volume with per-side limits clamped to [6, 18].
+
+    Anchor points:
+    - 12x8x8 -> 4..5
+    - 12x12x12 -> 5..6
+    """
+    x = max(6.0, min(18.0, float(orbit_limit_x)))
+    y = max(6.0, min(18.0, float(orbit_limit_y)))
+    z = max(6.0, min(18.0, float(orbit_limit_z)))
+    volume = x * y * z
+
+    # min_mass = a*V + b, through (768, 4) and (1728, 5)
+    slope = 1.0 / 960.0
+    min_mass = 3.2 + slope * volume
+    max_mass = min_mass + 1.0
+    return float(min_mass), float(max_mass)
+
+
 @dataclass
 class RunData:
     time: np.ndarray
@@ -188,7 +207,8 @@ def random_initial_conditions(
 ) -> list[Body]:
     """Randomise masses, positions, and velocities within a padded inner start region."""
     n = max(1, min(MAX_BODIES, int(body_count)))
-    masses = rng.uniform(4.0, 5.0, size=n)
+    mass_min, mass_max = mass_range_for_box(orbit_limit_x, orbit_limit_y, orbit_limit_z)
+    masses = rng.uniform(mass_min, mass_max, size=n)
     inner_limit_x = max(0.5, orbit_limit_x - max(0.1, start_padding))
     inner_limit_y = max(0.5, orbit_limit_y - max(0.1, start_padding))
     inner_limit_z = max(0.5, orbit_limit_z - max(0.1, start_padding))
@@ -356,7 +376,8 @@ def add_random_body_separate(
 
     center = np.mean(np.stack([b.position for b in existing], axis=0), axis=0) if existing else np.zeros(3, dtype=float)
     n = max(1, len(existing) + 1)
-    mass = float(rng.uniform(4.0, 5.0))
+    mass_min, mass_max = mass_range_for_box(orbit_limit_x, orbit_limit_y, orbit_limit_z)
+    mass = float(rng.uniform(mass_min, mass_max))
     name = BODY_NAMES[min(len(existing), MAX_BODIES - 1)]
 
     pos = np.zeros(3, dtype=float)
