@@ -110,6 +110,15 @@ controls.panSpeed = 0.75;
 controls.staticMoving = false;
 controls.dynamicDampingFactor = 0.12;
 
+function usesTouchControls() {
+  return window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+}
+
+function configureControls() {
+  controls.noPan = usesTouchControls();
+  if (controls.noPan) controls.target.set(0, 0, 0);
+}
+
 const bodyGroup = new THREE.Group();
 const trailGroup = new THREE.Group();
 const boundsGroup = new THREE.Group();
@@ -567,6 +576,7 @@ function tick() {
     updateLabels();
   }
 
+  if (controls.noPan) controls.target.set(0, 0, 0);
   controls.update();
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
@@ -577,10 +587,12 @@ function resize() {
   renderer.setSize(rect.width, rect.height, false);
   camera.aspect = rect.width / Math.max(1, rect.height);
   camera.updateProjectionMatrix();
+  configureControls();
   controls.handleResize();
 }
 
 window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", configureControls);
 
 for (const input of Object.values(ui)) {
   input.addEventListener("input", updateLabels);
