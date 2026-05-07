@@ -82,17 +82,3 @@ python simulation.py --mode D --branches 8 --steps 5000
 ## Output
 
 At completion, the program prints a philosophical/scientific analysis summary based on measured metrics.
-
-## Working Online App
-
-For an online working instance, deploy the Streamlit app:
-
-- Entry point: `app.py`
-- Install command: `pip install -r requirements.txt`
-- Start command: `streamlit run app.py --server.address 0.0.0.0 --server.port $PORT --server.headless true`
-
-Render can use the included `render.yaml`. Heroku-compatible hosts can use the included `Procfile`.
-
-This still is not a custom backend: it is one small Python web process that runs the existing simulation code and renders the controls/animation in the browser.
-
-For a simple private gate, set an `APP_PASSWORD` environment variable on the host. If `APP_PASSWORD` is set, the app asks for that password before showing the simulation. For stronger access control, also put the service behind the host's password/auth setting, Cloudflare Access, or another invite-only gate.
