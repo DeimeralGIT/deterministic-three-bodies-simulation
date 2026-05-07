@@ -22,9 +22,9 @@ APP_HTML = r"""
 
     <label>Sandbox</label>
     <div class="triple">
-      <input id="limitX" type="number" min="2" max="30" step="0.5" value="12">
-      <input id="limitY" type="number" min="2" max="30" step="0.5" value="12">
-      <input id="limitZ" type="number" min="2" max="30" step="0.5" value="12">
+      <input id="limitX" type="number" min="6" max="16" step="0.5" value="12">
+      <input id="limitY" type="number" min="6" max="16" step="0.5" value="12">
+      <input id="limitZ" type="number" min="6" max="16" step="0.5" value="12">
     </div>
 
     <div class="switches">
@@ -152,20 +152,43 @@ function v(x = 0, y = 0, z = 0) {
   return new THREE.Vector3(x, y, z);
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function randomDirection(rng) {
   const vec = v(normal(rng), normal(rng), normal(rng));
   return vec.lengthSq() > 1e-12 ? vec.normalize() : v(1, 0, 0);
 }
 
+function massRangeForBox(limitX, limitY, limitZ) {
+  const x = Math.max(6, Math.min(18, Number(limitX)));
+  const y = Math.max(6, Math.min(18, Number(limitY)));
+  const z = Math.max(6, Math.min(18, Number(limitZ)));
+  const volume = x * y * z;
+
+  // Anchors: 12x8x8 -> 4..5, 12x12x12 -> 8..9, superlinear growth with volume.
+  const t = Math.max(0, (volume - 768) / 960);
+  const minMass = 4 + 4 * Math.pow(t, 1.2);
+  return { minMass, maxMass: minMass + 1 };
+}
+
 function readConfig() {
+  const limitX = clamp(Number(ui.limitX.value), 6, 16);
+  const limitY = clamp(Number(ui.limitY.value), 6, 16);
+  const limitZ = clamp(Number(ui.limitZ.value), 6, 16);
+  ui.limitX.value = String(limitX);
+  ui.limitY.value = String(limitY);
+  ui.limitZ.value = String(limitZ);
+
   return {
     bodyCount: Number(ui.bodyCount.value),
     dt: 0.003,
     gravity: Number(ui.gravity.value),
     softening: 0.00001,
-    limitX: Number(ui.limitX.value),
-    limitY: Number(ui.limitY.value),
-    limitZ: Number(ui.limitZ.value),
+    limitX,
+    limitY,
+    limitZ,
     showGrid: ui.showGrid.checked,
     showAxisNumbers: ui.showAxisNumbers.checked,
     stepsPerFrame: Number(ui.stepsPerFrame.value),
@@ -244,6 +267,7 @@ function buildRandomBodies(config) {
   const inner = Math.min(innerX, innerY, innerZ);
   const minRadius = Math.max(0.2, 0.1 * inner);
   const minSep = Math.max(0.35, 0.16 * inner);
+  const { minMass, maxMass } = massRangeForBox(config.limitX, config.limitY, config.limitZ);
   const bodies = [];
 
   for (let i = 0; i < n; i++) {
@@ -254,7 +278,7 @@ function buildRandomBodies(config) {
       if (separated) break;
     }
 
-    const mass = 4 + rng();
+    const mass = minMass + rng() * (maxMass - minMass);
     const trial = randomDirection(rng);
     let tangent = new THREE.Vector3().crossVectors(position, trial);
     if (tangent.lengthSq() < 1e-10) tangent = new THREE.Vector3().crossVectors(position, v(1, 0, 0));
