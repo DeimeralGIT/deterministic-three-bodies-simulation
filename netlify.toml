@@ -1,0 +1,3 @@
+[build]
+  command = "python3 build_static.py"
+  publish = "public"
