@@ -19,20 +19,21 @@ BODY_NAMES = ["A", "B", "C", "D", "E", "F", "G", "H"]
 
 
 def mass_range_for_box(orbit_limit_x: float, orbit_limit_y: float, orbit_limit_z: float) -> tuple[float, float]:
-    """Linear mass range from sandbox volume with per-side limits clamped to [6, 18].
+    """Superlinear mass range from sandbox volume with per-side limits clamped to [6, 18].
 
     Anchor points:
     - 12x8x8 -> 4..5
-    - 12x12x12 -> 5..6
+    - 12x12x12 -> 8..9
     """
     x = max(6.0, min(18.0, float(orbit_limit_x)))
     y = max(6.0, min(18.0, float(orbit_limit_y)))
     z = max(6.0, min(18.0, float(orbit_limit_z)))
     volume = x * y * z
 
-    # min_mass = a*V + b, through (768, 4) and (1728, 5)
-    slope = 1.0 / 960.0
-    min_mass = 3.2 + slope * volume
+    # t=0 at V=768 (12x8x8), t=1 at V=1728 (12x12x12).
+    # Superlinear (>1 exponent) to grow faster at larger sandbox volumes.
+    t = max(0.0, (volume - 768.0) / 960.0)
+    min_mass = 4.0 + 4.0 * (t ** 1.2)
     max_mass = min_mass + 1.0
     return float(min_mass), float(max_mass)
 
@@ -649,6 +650,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    args.orbit_limit_x = max(6.0, min(16.0, float(args.orbit_limit_x)))
+    args.orbit_limit_y = max(6.0, min(16.0, float(args.orbit_limit_y)))
+    args.orbit_limit_z = max(6.0, min(16.0, float(args.orbit_limit_z)))
     args.body_count = max(1, min(MAX_BODIES, int(args.body_count)))
     use_random = args.random or (args.masses is None and args.positions is None and args.velocities is None)
     dashboard_rng = np.random.default_rng(args.seed)

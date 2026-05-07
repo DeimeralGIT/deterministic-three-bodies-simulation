@@ -2,7 +2,14 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Three-Body Simulation",
+      "name": "Open Deployed Build (Local)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "file": "${workspaceFolder}/public/index.html",
+      "webRoot": "${workspaceFolder}/public"
+    },
+    {
+      "name": "Run Three-Body Simulation (Python)",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/simulation.py",
