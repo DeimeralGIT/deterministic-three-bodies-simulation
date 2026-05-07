@@ -59,7 +59,15 @@
       <div class="metric"><span>Bodies</span><strong id="bodyMetric">3</strong></div>
     </div>
     <div id="viewport">
-      <div id="indicator"></div>
+      <div id="indicator">
+        <div class="indicator-head">
+          <span>Bodies</span>
+          <button id="indicatorToggle" type="button" aria-label="Collapse indicator">
+            <span class="indicator-arrow" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="indicatorRows"></div>
+      </div>
     </div>
   </main>
 </div>
@@ -83,6 +91,7 @@ const SOLAR_NAMES = ["Sun", "Mercury", "Venus", "Earth", "Mars", "Jupiter", "Sat
 const SOLAR_MASSES = [1.0, 1.66e-7, 2.45e-6, 3.00e-6, 3.23e-7, 9.54e-4, 2.86e-4, 4.37e-5];
 const SOLAR_RADII = [0.0, 0.39, 0.72, 1.00, 1.52, 5.20, 9.58, 19.20];
 const SOLAR_PHASES = [0.0, 0.3, 1.2, 2.0, 2.7, 3.5, 4.2, 5.0];
+const INDICATOR_ANIM_MS = 1000;
 
 const state = {
   preset: "Random",
@@ -95,6 +104,9 @@ const state = {
   trails: [],
   escaped: false,
   stopReason: "",
+  indicatorCollapsed: false,
+  indicatorAnimating: false,
+  indicatorRenderCollapsed: false,
 };
 
 const viewport = document.getElementById("viewport");
@@ -219,9 +231,17 @@ function updateLabels() {
   updateIndicator();
 }
 
-function updateIndicator() {
+function setIndicatorUiState() {
   const indicator = document.getElementById("indicator");
-  indicator.innerHTML = "";
+  const toggle = document.getElementById("indicatorToggle");
+  indicator.classList.toggle("collapsed", state.indicatorCollapsed);
+  toggle.classList.toggle("collapsed", state.indicatorCollapsed);
+  toggle.setAttribute("aria-label", state.indicatorCollapsed ? "Expand indicator" : "Collapse indicator");
+}
+
+function renderIndicatorRows() {
+  const rows = document.getElementById("indicatorRows");
+  rows.innerHTML = "";
   for (let i = 0; i < state.bodies.length; i++) {
     const body = state.bodies[i];
     const speed = body.velocity.length();
@@ -229,16 +249,64 @@ function updateIndicator() {
     const elevation = THREE.MathUtils.radToDeg(Math.atan2(body.velocity.z, Math.hypot(body.velocity.x, body.velocity.y)));
     const row = document.createElement("div");
     row.className = "indicator-row";
-    row.innerHTML = `
-      <span class="indicator-dot" style="background:#${COLORS[i % COLORS.length].toString(16).padStart(6, "0")}"></span>
-      <span class="indicator-name">${state.preset === "Solar" ? body.name : `body ${i + 1}`}</span>
-      <span>m=${formatMass(body.mass)}</span>
-      <span>v=${speed.toFixed(3)}</span>
-      <span>az=${azimuth >= 0 ? "+" : ""}${azimuth.toFixed(1)}</span>
-      <span>el=${elevation >= 0 ? "+" : ""}${elevation.toFixed(1)}</span>
-    `;
-    indicator.appendChild(row);
+    if (state.indicatorRenderCollapsed) {
+      row.innerHTML = `
+        <span class="indicator-dot" style="background:#${COLORS[i % COLORS.length].toString(16).padStart(6, "0")}"></span>
+        <span class="indicator-name">${state.preset === "Solar" ? body.name : `body ${i + 1}`}</span>
+      `;
+    } else {
+      row.innerHTML = `
+        <span class="indicator-dot" style="background:#${COLORS[i % COLORS.length].toString(16).padStart(6, "0")}"></span>
+        <span class="indicator-name">${state.preset === "Solar" ? body.name : `body ${i + 1}`}</span>
+        <span>m=${formatMass(body.mass)}</span>
+        <span>v=${speed.toFixed(3)}</span>
+        <span>az=${azimuth >= 0 ? "+" : ""}${azimuth.toFixed(1)}</span>
+        <span>el=${elevation >= 0 ? "+" : ""}${elevation.toFixed(1)}</span>
+      `;
+    }
+    rows.appendChild(row);
   }
+}
+
+function updateIndicator() {
+  setIndicatorUiState();
+  renderIndicatorRows();
+}
+
+function toggleIndicatorCollapsedAnimated() {
+  if (state.indicatorAnimating) return;
+  const indicator = document.getElementById("indicator");
+
+  const willCollapse = !state.indicatorCollapsed;
+  state.indicatorCollapsed = willCollapse;
+
+  if (!willCollapse) {
+    // Expand: show full content before panel grows.
+    state.indicatorRenderCollapsed = false;
+  }
+
+  setIndicatorUiState();
+  renderIndicatorRows();
+  state.indicatorAnimating = true;
+
+  const finish = () => {
+    if (!state.indicatorAnimating) return;
+    state.indicatorAnimating = false;
+    if (willCollapse) {
+      // Collapse: switch to compact rows only after panel shrink finishes.
+      state.indicatorRenderCollapsed = true;
+      setIndicatorUiState();
+      renderIndicatorRows();
+    }
+    indicator.removeEventListener("transitionend", onTransitionEnd);
+  };
+
+  const onTransitionEnd = (event) => {
+    if (event.propertyName === "width") finish();
+  };
+
+  indicator.addEventListener("transitionend", onTransitionEnd);
+  setTimeout(finish, INDICATOR_ANIM_MS + 120);
 }
 
 function formatMass(mass) {
@@ -709,6 +777,10 @@ document.getElementById("toggle").addEventListener("click", () => {
   updateLabels();
 });
 
+document.getElementById("indicatorToggle").addEventListener("click", () => {
+  toggleIndicatorCollapsedAnimated();
+});
+
 document.getElementById("restart").addEventListener("click", rebuildScene);
 document.getElementById("randomize").addEventListener("click", () => {
   state.seedBump += 1;
@@ -747,8 +819,16 @@ requestAnimationFrame(tick);
   .status-card strong { font-size: 20px; }
   #viewport { position: relative; height: calc(100vh - 112px); background: white; border: 1px solid #ded6ca; border-radius: 8px; overflow: hidden; touch-action: none; }
   canvas { display: block; width: 100%; height: 100%; }
-  #indicator { position: absolute; left: 12px; bottom: 12px; max-width: min(520px, calc(100% - 24px)); padding: 10px 12px; border: 1px solid rgba(23,32,31,0.16); border-radius: 8px; background: rgba(255,255,255,0.86); backdrop-filter: blur(8px); color: #17201f; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.35; pointer-events: none; }
-  .indicator-row { display: grid; grid-template-columns: 14px 58px repeat(4, auto); gap: 9px; align-items: center; white-space: nowrap; }
+  #indicator { position: absolute; left: 12px; bottom: 12px; width: min(380px, calc(100% - 24px)); padding: 10px 12px; border: 1px solid rgba(23,32,31,0.16); border-radius: 8px; background: rgba(255,255,255,0.86); backdrop-filter: blur(8px); color: #17201f; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.35; pointer-events: auto; overflow-x: auto; overflow-y: hidden; transition: width 1s ease, padding 1s ease; }
+  #indicator.collapsed { width: min(140px, calc(100% - 24px)); }
+  .indicator-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-weight: 700; }
+  #indicatorRows { transition: opacity 1s ease; }
+  #indicator.collapsed #indicatorRows { opacity: 0.98; }
+  #indicatorToggle { height: 24px; width: 24px; border-radius: 999px; border: 0; background: #2a6f66; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+  #indicatorToggle:hover { background: #245e57; }
+  .indicator-arrow { width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #ffffff; transform: rotate(180deg); transition: transform 1s ease; transform-origin: 45% 50%; }
+  #indicatorToggle.collapsed .indicator-arrow { transform: rotate(0deg); }
+  .indicator-row { display: grid; grid-template-columns: 14px 58px repeat(4, auto); gap: 9px; align-items: center; white-space: nowrap; min-width: max-content; }
   .indicator-row + .indicator-row { margin-top: 4px; }
   .indicator-dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; box-shadow: 0 0 0 1px rgba(23,32,31,0.18); }
   .indicator-name { font-weight: 700; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
